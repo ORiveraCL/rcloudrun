@@ -1,0 +1,127 @@
+---
+kind: pipeline
+type: kubernetes
+name: "CerAnalytics - R Server"
+steps:
+  - name: upload-image
+    image: plugins/gcr
+    settings:
+      repo: movelab-registry/ceranalytics-rserver
+      tags:
+        - latest
+        - "${DRONE_COMMIT}"
+        - "${DRONE_BUILD_NUMBER}"
+    environment:
+      GOOGLE_CREDENTIALS:
+        from_secret: registry_credentials
+    when:
+      branch:
+        - master
+        - "feature/*"
+      event:
+        - push
+
+  - name: deploy-to-staging
+    image: nytimes/drone-gke
+    settings:
+      cluster: staging
+      expand_env_vars: true
+      namespace: ceranalytics
+      vars:
+        appname: ceranalytics-rserver
+        build: "${DRONE_BUILD_NUMBER}"
+        consul_http_addr: consul.tools.movelab.cl
+        consul_http_ssl: true
+        consul_http_ssl_verify: false
+        consul_http_token: 0203dec7-d5b2-124e-8ceb-c172f26d8fae
+        profile: staging
+        public_url: /
+        replicas: 1
+      verbose: true
+      zone: us-central1-a
+    environment:
+      TOKEN:
+        from_secret: movelab_credentials
+    when:
+      branch:
+        - master
+        - "feature/*"
+      event:
+        - push
+  - name: deploy-to-production
+    image: nytimes/drone-gke
+    settings:
+      cluster: production
+      expand_env_vars: true
+      namespace: ceranalytics
+      vars:
+        appname: ceranalytics-rserver
+        build: "${DRONE_COMMIT}"
+        consul_http_addr: consul.tools.movelab.cl
+        consul_http_ssl: true
+        consul_http_ssl_verify: false
+        consul_http_token: 0203dec7-d5b2-124e-8ceb-c172f26d8fae
+        kong_prefix: /
+        profile: "${DRONE_DEPLOY_TO}"
+        public_url: /
+        replicas: 1
+      verbose: true
+      zone: us-central1-a
+    environment:
+      TOKEN:
+        from_secret: movelab_credentials
+    when:
+      event:
+        - promote
+      target:
+        - production
+  - name: deploy-to-ceranalytics
+    image: nytimes/drone-gke
+    settings:
+      cluster: production
+      expand_env_vars: true
+      namespace: ceranalytics
+      vars:
+        appname: ceranalytics-rserver
+        build: "${DRONE_COMMIT}"
+        consul_http_addr: consul.tools.movelab.cl
+        consul_http_ssl: true
+        consul_http_ssl_verify: false
+        consul_http_token: 0203dec7-d5b2-124e-8ceb-c172f26d8fae
+        kong_prefix: /
+        profile: "production"
+        public_url: /
+        replicas: 3
+      verbose: true
+      zone: us-central1-a
+    environment:
+      TOKEN:
+        from_secret: ceranalytics_credentials
+    when:
+      event:
+        - promote
+      target:
+        - ceranalytics
+  - name: discord-notification
+    image: appleboy/drone-discord
+    settings:
+      webhook_id: 858410540974997504
+      webhook_token: vYkdI5z1dG_yVU3FZF6YNOvtqyvFyut6HnBrNTXIO7gsHAjlIQskXgzObG8MLFNcmYrK
+      message: |
+        {{#success build.status}}
+        ✅ {{repo.name}} build #{{build.number}}
+        📎 `{{build.event}}`
+        📝 Commit en `{{commit.branch}}` `{{truncate commit.sha 8}}`
+        ```{{commit.message}}```
+        {{else}}
+        ❌ {{repo.name}} build #{{build.number}}
+        📎 `{{build.event}}`
+        📝 Commit en `{{commit.branch}}` `{{truncate commit.sha 8}}`
+        ```{{commit.message}}```
+        {{/success}}
+        🌐 {{ build.link }}
+        ⌛️ Duración {{since build.started}}
+    when:
+      status:
+        - success
+        - failure

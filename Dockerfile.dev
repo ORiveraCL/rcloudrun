@@ -1,0 +1,21 @@
+FROM rstudio/plumber:latest
+
+# CONSUL
+ARG CONSUL_TEMPLATE_VERSION=0.24.1
+ADD "https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.tgz" /
+
+WORKDIR /workspace
+COPY . .
+
+RUN tar zxfv "/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.tgz" \
+  && apt-get install -y inotify-tools lsof \
+  && R -e "install.packages('dotenv')" \
+  && R -e "install.packages('urltools')" \
+  && R -e "install.packages('Rcpp')" \
+  && R -e "install.packages('elastic')" \
+  && R -e "install.packages('readxl')" \
+  && R -e "install.packages('tidyverse')" \
+  && R -e "install.packages('lubridate')" \
+  && R -e "install.packages('randomForest')"
+
+ENTRYPOINT ["./docker/entrypoint.dev.sh"]
